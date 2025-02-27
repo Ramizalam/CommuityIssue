@@ -7,6 +7,7 @@ import { AuthModal } from './AuthModal';
 export function Header() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -15,9 +16,17 @@ export function Header() {
 
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setIsAuthenticated(!!session);
+      async (event, session) => {
+        const authenticated = !!session;
+        setIsAuthenticated(authenticated);
         setUserEmail(session?.user?.email || null);
+        
+        // Check if user is admin
+        if (authenticated && session?.user?.email === 'admin123@gmail.com') {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
       }
     );
 
@@ -31,14 +40,25 @@ export function Header() {
     const { data: { session } } = await supabase.auth.getSession();
     setIsAuthenticated(!!session);
     setUserEmail(session?.user?.email || null);
+    
+    // Direct check for admin email
+    if (session?.user?.email === 'admin123@gmail.com') {
+      setIsAdmin(true);
+    } else {
+      setIsAdmin(false);
+    }
   }
 
   async function handleLogout() {
     await supabase.auth.signOut();
     setIsAuthenticated(false);
     setUserEmail(null);
+    setIsAdmin(false);
     setIsMenuOpen(false);
   }
+
+  // For debugging - remove in production
+  console.log("Auth state:", { isAuthenticated, isAdmin, userEmail });
 
   return (
     <header className="bg-indigo-600">
@@ -69,12 +89,7 @@ export function Header() {
 
           {/* Desktop navigation */}
           <div className="hidden md:flex md:items-center md:space-x-4">
-            <Link
-              to="/report"
-              className="inline-block rounded-md border border-transparent bg-white py-2 px-4 text-base font-medium text-indigo-600 hover:bg-indigo-50"
-            >
-              Report Issue
-            </Link>
+            {/* Always show View Issues for all users */}
             <Link
               to="/issues"
               className="inline-block rounded-md border border-transparent bg-indigo-500 py-2 px-4 text-base font-medium text-white hover:bg-indigo-600"
@@ -82,10 +97,28 @@ export function Header() {
               View Issues
             </Link>
             
+            {isAuthenticated && !isAdmin && (
+              <Link
+                to="/report"
+                className="inline-block rounded-md border border-transparent bg-white py-2 px-4 text-base font-medium text-indigo-600 hover:bg-indigo-50"
+              >
+                Report Issue
+              </Link>
+            )}
+            
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="inline-block rounded-md border border-transparent bg-white py-2 px-4 text-base font-medium text-indigo-600 hover:bg-indigo-50"
+              >
+                Admin Dashboard
+              </Link>
+            )}
+            
             {isAuthenticated ? (
               <div className="flex items-center space-x-3">
                 <span className="text-sm text-white">
-                  {userEmail}
+                  {userEmail} {isAdmin ? "(Admin)" : ""}
                 </span>
                 <button
                   onClick={handleLogout}
@@ -111,13 +144,7 @@ export function Header() {
         {isMenuOpen && (
           <div className="md:hidden py-3 pb-5 border-t border-indigo-500">
             <div className="space-y-3 flex flex-col items-center">
-              <Link
-                to="/report"
-                className="block w-full rounded-md border border-transparent bg-white py-2 px-4 text-center font-medium text-indigo-600 hover:bg-indigo-50"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Report Issue
-              </Link>
+              {/* Always show View Issues for all users in mobile menu too */}
               <Link
                 to="/issues"
                 className="block w-full rounded-md border border-transparent bg-indigo-500 py-2 px-4 text-center font-medium text-white hover:bg-indigo-600"
@@ -126,10 +153,30 @@ export function Header() {
                 View Issues
               </Link>
               
+              {isAuthenticated && !isAdmin && (
+                <Link
+                  to="/report"
+                  className="block w-full rounded-md border border-transparent bg-white py-2 px-4 text-center font-medium text-indigo-600 hover:bg-indigo-50"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Report Issue
+                </Link>
+              )}
+              
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="block w-full rounded-md border border-transparent bg-white py-2 px-4 text-center font-medium text-indigo-600 hover:bg-indigo-50"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Admin Dashboard
+                </Link>
+              )}
+              
               {isAuthenticated ? (
                 <div className="flex flex-col items-center space-y-3 w-full">
                   <span className="text-sm text-white">
-                    {userEmail}
+                    {userEmail} {isAdmin ? "(Admin)" : ""}
                   </span>
                   <button
                     onClick={handleLogout}
@@ -159,8 +206,12 @@ export function Header() {
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        onSuccess={() => {
+        onSuccess={(adminStatus) => {
           setIsAuthenticated(true);
+          // If admin status was explicitly provided, use it
+          if (adminStatus !== undefined) {
+            setIsAdmin(adminStatus);
+          }
           setShowAuthModal(false);
         }}
       />
