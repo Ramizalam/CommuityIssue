@@ -31,19 +31,31 @@ export function IssueComments({ issueId }: IssueCommentsProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!newComment.trim()) return;
-
+  
     setSubmitting(true);
     try {
+      console.log("Attempting to add comment...");
       await addComment(issueId, newComment);
+      console.log("Comment added successfully");
       setNewComment('');
       await fetchComments();
     } catch (error) {
       console.error('Error adding comment:', error);
+      // Log the specific error details
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+      }
       alert('Failed to add comment. Please try again.');
     } finally {
       setSubmitting(false);
     }
   }
+
+  // Helper function to get username from email
+  const getUsernameFromEmail = (email: string) => {
+    return email.split('@')[0];
+  };
 
   if (loading) {
     return <div className="text-center py-4">Loading comments...</div>;
@@ -74,7 +86,7 @@ export function IssueComments({ issueId }: IssueCommentsProps) {
         {comments.map((comment) => (
           <div key={comment.id} className="bg-gray-50 rounded-lg p-4">
             <div className="flex justify-between items-start">
-              <span className="font-medium">{comment.users.email}</span>
+              <span className="font-medium">{getUsernameFromEmail(comment.users.email)}</span>
               <span className="text-sm text-gray-500">
                 {format(new Date(comment.created_at), 'PPp')}
               </span>

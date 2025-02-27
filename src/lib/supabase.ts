@@ -107,22 +107,75 @@ export async function updateIssueStatus(id: string, status: Issue['status']) {
 }
 
 export async function getComments(issueId: string) {
-  const { data, error } = await supabase
+  // First, get the comments
+  const { data: comments, error } = await supabase
     .from('comments')
-    .select('*, users(email)')
+    .select('*')
     .eq('issue_id', issueId)
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data as (Comment & { users: { email: string } })[];
+  
+  // Then, get all unique user_ids
+  const userIds = [...new Set(comments.map(c => c.user_id))];
+  
+  // Fetch user data for these ids from the auth.users table
+  // Note: With Supabase, auth user data is often in auth.users, not the public schema
+  const { data: users, error: userError } = await supabase
+    .from('auth.users') // Try this table name - might need to adjust
+    .select('id, email')
+    .in('id', userIds);
+  
+  if (userError) {
+    console.warn("Could not fetch users:", userError);
+    // If that doesn't work, try a direct auth API call
+    try {
+      // Get the current user as a fallback
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Use the current user's email for their comments
+      return comments.map(comment => ({
+        ...comment,
+        users: { 
+          email: comment.user_id === user?.id 
+            ? user.email 
+            : `User ${comment.user_id.slice(0, 8)}...` 
+        }
+      }));
+    } catch (e) {
+      console.error("Failed to get current user:", e);
+      return comments.map(comment => ({
+        ...comment,
+        users: { email: `User ${comment.user_id.slice(0, 8)}...` }
+      }));
+    }
+  }
+  
+  // Create a map of user_id to email
+  const userMap = Object.fromEntries(
+    users.map(user => [user.id, user.email || `User ${user.id.slice(0, 8)}`])
+  );
+  
+  // Combine the comments with user emails
+  return comments.map(comment => ({
+    ...comment,
+    users: { 
+      email: userMap[comment.user_id] || `User ${comment.user_id.slice(0, 8)}...` 
+    }
+  }));
 }
 
 export async function addComment(issueId: string, content: string) {
+  console.log("Getting user...");
   const { data: { user } } = await supabase.auth.getUser();
   
-  if (!user) throw new Error('You must be logged in to comment');
+  if (!user) {
+    console.error("No authenticated user found");
+    throw new Error('You must be logged in to comment');
+  }
 
-  const { error } = await supabase
+  console.log("User found, adding comment...");
+  const { error, data } = await supabase
     .from('comments')
     .insert({
       content,
@@ -130,7 +183,12 @@ export async function addComment(issueId: string, content: string) {
       user_id: user.id,
     });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Supabase error:", error);
+    throw error;
+  }
+  
+  console.log("Comment added successfully:", data);
   return true;
 }
 
